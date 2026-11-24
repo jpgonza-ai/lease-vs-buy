@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lease vs. Buy Calculator</title>
+<meta name="description" content="Compare leasing and buying equipment: monthly payments, total cash out, NPV before and after tax, and the lease's implied interest rate.">
+<style>
+  /* ---------- Colors & base ---------- */
+  :root {
+    --bg: #f4f6f9;
+    --card: #ffffff;
+    --text: #1b2533;
+    --muted: #5d6b7e;
+    --border: #dfe4ec;
+    --accent: #1f4e8c;
+    --accent-soft: #e8eff9;
+    --lease: #1f4e8c;
+    --buy: #0f7a5c;
+    --good-bg: #e7f5ef;
+    --good-text: #0b5e46;
+    --input-bg: #fbfcfe;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #10151d;
+      --card: #18202b;
+      --text: #e6ebf2;
+      --muted: #9aa7b8;
+      --border: #2a3545;
+      --accent: #7fb0f0;
+      --accent-soft: #1d2b40;
+      --lease: #7fb0f0;
+      --buy: #5fd0a8;
+      --good-bg: #133528;
+      --good-text: #8fe3c2;
+      --input-bg: #121921;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 24px 16px 40px; }
+
+  header h1 { margin: 0 0 4px; font-size: 1.7rem; letter-spacing: -0.01em; }
+  header p { margin: 0 0 20px; color: var(--muted); max-width: 70ch; }
+
+  /* ---------- Layout: inputs left, results right ---------- */
+  .layout { display: grid; grid-template-columns: 380px 1fr; gap: 20px; align-items: start; }
+  .layout > * { min-width: 0; }
+  @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px;
+    margin-bottom: 16px;
+  }
+  .card h2 { font-size: 1rem; margin: 0 0 12px; }
+  .card h2 .tag {
+    display: inline-block; font-size: 0.72rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.05em; padding: 2px 8px; border-radius: 999px; margin-right: 6px; vertical-align: 1px;
+  }
+  .tag.lease { background: var(--accent-soft); color: var(--lease); }
+  .tag.buy { background: var(--good-bg); color: var(--buy); }
+
+  /* ---------- Form fields ---------- */
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-weight: 600; font-size: 0.88rem; margin-bottom: 4px; }
+  .field .help { display: block; color: var(--muted); font-size: 0.8rem; margin-top: 3px; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .input-wrap { position: relative; }
+  .input-wrap .unit {
+    position: absolute; top: 50%; transform: translateY(-50%); color: var(--muted);
+    font-size: 0.85rem; pointer-events: none;
+  }
+  .input-wrap .unit.pre { left: 10px; }
+  .input-wrap .unit.post { right: 10px; }
+  input[type=number], select {
+    width: 100%; padding: 9px 10px; font: inherit; color: var(--text);
+    background: var(--input-bg); border: 1px solid var(--border); border-radius: 8px;
+  }
+  input[type=number] { font-variant-numeric: tabular-nums; }
+  .input-wrap.has-pre input { padding-left: 24px; }
+  .input-wrap.has-post input { padding-right: 52px; }
+  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }
+  .hidden { display: none !important; }
+
+  button.reset {
+    font: inherit; font-size: 0.88rem; background: transparent; color: var(--accent);
+    border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; cursor: pointer;
+  }
+  button.reset:hover { background: var(--accent-soft); }
+
+  /* ---------- Results ---------- */
+  .verdict { border-left: 5px solid var(--accent); }
+  .verdict .headline { font-size: 1.35rem; font-weight: 700; margin: 0 0 6px; line-height: 1.3; }
+  .verdict .why { margin: 0; color: var(--muted); }
+  .verdict .basis { margin: 8px 0 0; font-size: 0.8rem; color: var(--muted); }
+
+  .kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
+  @media (max-width: 560px) { .kpis { grid-template-columns: 1fr; } }
+  .kpi { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+  .kpi .label { font-size: 0.78rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .kpi .value { font-size: 1.4rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .kpi .sub { font-size: 0.8rem; color: var(--muted); }
+
+  .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; white-space: normal; }
+  thead th { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); font-weight: 600; }
+  th.lease, td.lease-col { color: var(--lease); }
+  th.buy { color: var(--buy); }
+  @media (max-width: 560px) { th, td { padding: 7px 6px; font-size: 0.85rem; } .card { padding: 14px; } }
+  tr.total td { font-weight: 700; border-top: 2px solid var(--border); }
+  tr.emph td { font-weight: 700; }
+  td.win { background: var(--good-bg); color: var(--good-text); font-weight: 700; }
+  .note { color: var(--muted); font-size: 0.8rem; margin: 10px 0 0; }
+
+  .explain dl { margin: 0; }
+  .explain dt { font-weight: 700; margin-top: 10px; }
+  .explain dt:first-child { margin-top: 0; }
+  .explain dd { margin: 2px 0 0; color: var(--muted); }
+
+  footer { text-align: center; color: var(--muted); font-size: 0.85rem; margin-top: 24px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Lease vs. Buy Calculator</h1>
+  <p>Compare leasing a piece of equipment with buying it (with a loan or in cash). Change any number on the left and the results update instantly.</p>
+</header>
+
+<div class="layout">
+
+  <!-- ===================== INPUTS ===================== -->
+  <form id="inputs" autocomplete="off" onsubmit="return false">
+
+    <section class="card">
+      <h2>Equipment</h2>
+      <div class="field">
+        <label for="price">Equipment price</label>
+        <div class="input-wrap has-pre"><span class="unit pre">$</span><input type="number" id="price" min="0" step="1000"></div>
+      </div>
+      <div class="field">
+        <label for="life">Useful life</label>
+        <div class="input-wrap has-post"><input type="number" id="life" min="1" step="1"><span class="unit post">years</span></div>
+        <span class="help">Used for straight-line tax depreciation.</span>
+      </div>
+      <div class="field">
+        <label for="residual">Expected resale value at end of lease term</label>
+        <div class="input-wrap has-pre"><span class="unit pre">$</span><input type="number" id="residual" min="0" step="1000"></div>
+        <span class="help"><strong>Residual value</strong> is what the equipment should still be worth when the term ends. If you buy, you keep this value. If you lease and return it, the lessor keeps it.</span>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2><span class="tag lease">Option A</span>Lease</h2>
+      <div class="row2">
+        <div class="field">
+          <label for="leaseTerm">Term</label>
+          <div class="input-wrap has-post"><input type="number" id="leaseTerm" min="1" step="1"><span class="unit post">months</span></div>
+        </div>
+        <div class="field">
+          <label for="leasePmt">Monthly payment</label>
+          <div class="input-wrap has-pre"><span class="unit pre">$</span><input type="number" id="leasePmt" min="0" step="10"></div>
+        </div>
+      </div>
+      <div class="field">
+        <label for="leaseUpfront">Upfront payment (fees, deposit, extra rent)</label>
+        <div class="input-wrap has-pre"><span class="unit pre">$</span><input type="number" id="leaseUpfront" min="0" step="100"></div>
+      </div>
+      <div class="field">
+        <label for="leaseTiming">Payments are made</label>
+        <select id="leaseTiming">
+          <option value="advance">At the start of each month (in advance)</option>
+          <option value="arrears">At the end of each month (in arrears)</option>
+        </select>
+        <span class="help">Most equipment leases are paid in advance.</span>
+      </div>
+      <div class="field">
+        <label for="leaseEnd">At the end of the lease</label>
+        <select id="leaseEnd">
+          <option value="return">Return the equipment</option>
+          <option value="buyout">Buy it out for a set amount</option>
+        </select>
+      </div>
+      <div class="field" id="buyoutField">
+        <label for="buyoutAmt">Buyout amount</label>
+        <div class="input-wrap has-pre"><span class="unit pre">$</span><input type="number" id="buyoutAmt" min="0" step="100"></div>
+        <span class="help">e.g. $1 out, 10% purchase option, or a fixed purchase price.</span>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2><span class="tag buy">Option B</span>Buy</h2>
+      <div class="field">
+        <label for="buyMethod">How you pay</label>
+        <select id="buyMethod">
+          <option value="loan">Down payment + loan</option>
+          <option value="cash">Pay cash</option>
+        </select>
+      </div>
+      <div id="loanFields">
+        <div class="field">
+          <label for="downPct">Down payment</label>
+          <div class="input-wrap has-post"><input type="number" id="downPct" min="0" max="100" step="1"><span class="unit post">%</span></div>
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label for="loanApr">Loan APR</label>
+            <div class="input-wrap has-post"><input type="number" id="loanApr" min="0" step="0.1"><span class="unit post">%</span></div>
+          </div>
+          <div class="field">
+            <label for="loanTerm">Loan term</label>
+            <div class="input-wrap has-post"><input type="number" id="loanTerm" min="1" step="1"><span class="unit post">months</span></div>
+          </div>
+        </div>
+        <span class="help" style="display:block;margin-top:-4px;color:var(--muted);font-size:0.8rem">If the loan runs longer than the lease, the remaining balance is paid off at the end of the lease term so both options cover the same period.</span>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Assumptions</h2>
+      <div class="field">
+        <label for="discRate">Discount rate / cost of capital</label>
+        <div class="input-wrap has-post"><input type="number" id="discRate" min="0" step="0.1"><span class="unit post">% / yr</span></div>
+        <span class="help">The return your company expects on its money. Used to turn future payments into today's dollars.</span>
+      </div>
+      <div class="field">
+        <label for="taxRate">Corporate tax rate (optional)</label>
+        <div class="input-wrap has-post"><input type="number" id="taxRate" min="0" max="100" step="1"><span class="unit post">%</span></div>
+        <span class="help">Set to 0 to ignore taxes. Lease payments and loan interest are deductible; owned equipment is depreciated straight-line over its useful life.</span>
+      </div>
+      <button type="button" class="reset" id="resetBtn">Reset to example values</button>
+    </section>
+  </form>
+
+  <!-- ===================== RESULTS ===================== -->
+  <main id="results">
+
+    <section class="card verdict" id="verdictCard">
+      <p class="headline" id="verdictHeadline">&nbsp;</p>
+      <p class="why" id="verdictWhy">&nbsp;</p>
+      <p class="basis" id="verdictBasis">&nbsp;</p>
+    </section>
+
+    <div class="kpis">
+      <div class="kpi">
+        <div class="label">Lease implied rate</div>
+        <div class="value" id="kpiImplied">–</div>
+        <div class="sub" id="kpiImpliedSub">&nbsp;</div>
+      </div>
+      <div class="kpi">
+        <div class="label">Lease NPV of cost</div>
+        <div class="value" id="kpiLease">–</div>
+        <div class="sub" id="kpiLeaseSub">&nbsp;</div>
+      </div>
+      <div class="kpi">
+        <div class="label">Buy NPV of cost</div>
+        <div class="value" id="kpiBuy">–</div>
+        <div class="sub" id="kpiBuySub">&nbsp;</div>
+      </div>
+    </div>
+
+    <section class="card">
+      <h2>Side-by-side comparison</h2>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th></th><th class="lease">Lease</th><th class="buy">Buy</th></tr></thead>
+          <tbody id="summaryBody"></tbody>
+        </table>
+      </div>
+      <p class="note">NPV = net present value of the cost, in today's dollars. Lower is better. The residual value you keep is counted as money coming back to you at the end of the term.</p>
+    </section>
+
+    <section class="card">
+      <h2>Year-by-year cash flows</h2>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Period</th>
+              <th class="lease">Lease</th>
+              <th class="lease" id="thLeaseTax">Lease after tax</th>
+              <th class="buy">Buy</th>
+              <th class="buy" id="thBuyTax">Buy after tax</th>
+            </tr>
+          </thead>
+          <tbody id="yearBody"></tbody>
+        </table>
+      </div>
+      <p class="note">Money you pay out is shown as a positive number. Amounts in (parentheses) are money coming back to you, such as the resale value or tax savings. "Today" is the signing date.</p>
+    </section>
+
+    <section class="card explain">
+      <h2>How to read this</h2>
+      <dl>
+        <dt>Residual value</dt>
+        <dd>What the equipment is worth at the end of the term. Owning means you keep it, which lowers the true cost of buying.</dd>
+        <dt>NPV (net present value)</dt>
+        <dd>A dollar paid in three years hurts less than a dollar paid today. NPV converts every future payment into today's dollars using your discount rate, so the two options can be compared fairly. The option with the lower NPV of cost is cheaper.</dd>
+        <dt>Implied rate</dt>
+        <dd>The interest rate hidden inside the lease. It is the rate at which the lease payments (plus the equipment's value at the end) exactly pay back the equipment price. Compare it with your loan APR: if it's lower, the lessor is financing you more cheaply than your lender.</dd>
+        <dt>After tax</dt>
+        <dd>Lease payments are treated as a deductible expense. When you buy, you deduct loan interest and straight-line depreciation instead, and pay tax on any gain if the equipment is worth more than its tax book value at the end.</dd>
+      </dl>
+    </section>
+
+  </main>
+</div>
+
+<footer>Built with Claude Code · For educational purposes only, not financial advice</footer>
+</div>
+
+<script>
+/* =====================================================================
+   LEASE VS. BUY — FINANCIAL ENGINE
+   All math lives in pure functions (no page access) so it is easy to
+   check. Conventions:
+     • Time runs in months: t = 0 is signing day, t = 1 is one month later.
+     • Cash flows are from YOUR (the lessee/buyer's) point of view and are
+       recorded as COSTS: positive = money out, negative = money in.
+     • Both options are compared over the same horizon: the lease term.
+   ===================================================================== */
+
+const DEFAULTS = {
+  price: 100000,      // equipment price, USD
+  life: 7,            // useful life, years (tax depreciation)
+  residual: 40000,    // expected resale value at end of lease term
+  leaseTerm: 36,      // months
+  leasePmt: 2150,     // monthly lease payment
+  leaseUpfront: 1500, // upfront fees / deposit / extra rent
+  leaseTiming: "advance",
+  leaseEnd: "return", // "return" or "buyout"
+  buyoutAmt: 35000,   // only used if leaseEnd = "buyout"
+  buyMethod: "loan",  // "loan" or "cash"
+  downPct: 10,        // % of price
+  loanApr: 8.5,       // % per year
+  loanTerm: 36,       // months
+  discRate: 9,        // % per year, cost of capital
+  taxRate: 25         // % (0 = ignore taxes)
+};
+
+/* ---------------------------------------------------------------
+   AMORTIZATION — standard level-payment loan formula
+     r   = APR / 12                (monthly periodic rate)
+     PMT = P · r / (1 − (1 + r)^−n)
+   With r = 0 it reduces to P / n. Payments are at the end of each
+   month (in arrears), as on a normal loan.
+   --------------------------------------------------------------- */
+function loanPayment(principal, aprPct, months) {
+  if (principal <= 0 || months <= 0) return 0;
+  const r = aprPct / 100 / 12;
+  if (r === 0) return principal / months;
+  return principal * r / (1 - Math.pow(1 + r, -months));
+}
+
+/* Month-by-month loan schedule: interest = balance × r,
+   principal = payment − interest, balance reduces by principal. */
+function loanSchedule(principal, aprPct, months) {
+  const r = aprPct / 100 / 12;
+  const pmt = loanPayment(principal, aprPct, months);
+  const rows = [];
+  let balance = principal;
+  for (let k = 1; k <= months; k++) {
+    const interest = balance * r;
+    const princ = Math.min(pmt - interest, balance);
+    balance = Math.max(0, balance - princ);
+    rows.push({ month: k, payment: interest + princ, interest, principal: princ, balance });
+  }
+  return { pmt, rows };
+}
+
+/* ---------------------------------------------------------------
+   NPV — discount each monthly cash flow back to today
+     NPV = Σ CF_t / (1 + d)^t
+   The annual discount rate R is converted to an equivalent monthly
+   rate d = (1 + R)^(1/12) − 1, so 12 months of compounding at d
+   equals exactly one year at R.
+   --------------------------------------------------------------- */
+function monthlyDiscountRate(annualPct) {
+  return Math.pow(1 + annualPct / 100, 1 / 12) - 1;
+}
+function npv(cashFlows, annualPct) {
+  const d = monthlyDiscountRate(annualPct);
+  return cashFlows.reduce((sum, cf, t) => sum + cf / Math.pow(1 + d, t), 0);
+}
+
+/* ---------------------------------------------------------------
+   IMPLIED LEASE RATE — the IRR of the lease from the lessor's side
+   The lessor pays the equipment price today and receives the upfront
+   payment, the rent and, at the end, either the buyout amount or the
+   equipment back (worth the expected residual value). The implied
+   monthly rate i solves:
+     Price = Upfront + Σ Rent_t / (1+i)^t + EndValue / (1+i)^n
+   Solved by bisection (the function is monotonic, so the answer is
+   unique). Reported as i × 12, a nominal annual rate directly
+   comparable with a loan APR.
+   --------------------------------------------------------------- */
+function impliedLeaseRate(lessorFlows) {
+  const f = (i) => lessorFlows.reduce((s, cf, t) => s + cf / Math.pow(1 + i, t), 0);
+  let lo = -0.99, hi = 1;            // monthly rate search range (−99% … +100% per month)
+  if (f(lo) * f(hi) > 0) return NaN;  // no sign change → no meaningful rate
+  for (let k = 0; k < 200; k++) {
+    const mid = (lo + hi) / 2;
+    if (f(lo) * f(mid) <= 0) hi = mid; else lo = mid;
+  }
+  return ((lo + hi) / 2) * 12 * 100;  // annual %, APR-style
+}
+
+/* ---------------------------------------------------------------
+   MAIN CALCULATION
+   --------------------------------------------------------------- */
+function calculate(inp) {
+  const n = Math.max(1, Math.round(inp.leaseTerm)); // comparison horizon, months
+  const tax = Math.min(Math.max(inp.taxRate, 0), 100) / 100;
+  const price = Math.max(inp.price, 0);
+  const residual = Math.max(inp.residual, 0);
+  const lifeMonths = Math.max(1, Math.round(inp.life * 12));
+  const advance = inp.leaseTiming === "advance";
+  const buyout = inp.leaseEnd === "buyout";
+
+  /* ---------- OPTION A: LEASE ----------
+     Rent is paid at t = 0…n−1 (in advance) or t = 1…n (in arrears).
+     After tax: rent and upfront fees are deductible, so each saves
+     (tax rate × amount) in tax at the time it is paid.
+     Buyout: the buyout price is paid at t = n and you then own the
+     equipment, valued at the residual value (as if sold). Any gain
+     over the buyout price is taxed. */
+  const leasePre = new Array(n + 1).fill(0);
+  const leaseTax = new Array(n + 1).fill(0); // tax effect (negative = tax saved)
+  leasePre[0] += inp.leaseUpfront;
+  leaseTax[0] -= inp.leaseUpfront * tax;
+  for (let k = 0; k < n; k++) {
+    const t = advance ? k : k + 1;
+    leasePre[t] += inp.leasePmt;
+    leaseTax[t] -= inp.leasePmt * tax;
+  }
+  if (buyout) {
+    leasePre[n] += inp.buyoutAmt;              // pay the buyout
+    leasePre[n] -= residual;                   // keep an asset worth the residual
+    leaseTax[n] += (residual - inp.buyoutAmt) * tax; // tax on the gain
+  }
+
+  /* ---------- OPTION B: BUY ----------
+     Loan: down payment at t = 0, loan payments at t = 1…, and any
+     balance still owed at t = n is paid off then.
+     Cash: full price at t = 0.
+     End of term: you keep equipment worth the residual value (inflow).
+     After tax: interest and straight-line depreciation are deductible;
+     the gain (residual − tax book value) is taxed at t = n. */
+  const buyPre = new Array(n + 1).fill(0);
+  const buyTax = new Array(n + 1).fill(0);
+  let buyMonthly = 0, loanPayoff = 0;
+  if (inp.buyMethod === "cash") {
+    buyPre[0] += price;
+  } else {
+    const downPct = Math.min(Math.max(inp.downPct, 0), 100);
+    const down = price * downPct / 100;
+    const loanMonths = Math.max(1, Math.round(inp.loanTerm));
+    const sched = loanSchedule(price - down, inp.loanApr, loanMonths);
+    buyMonthly = sched.pmt;
+    buyPre[0] += down;
+    for (const row of sched.rows) {
+      if (row.month > n) break;
+      buyPre[row.month] += row.payment;
+      buyTax[row.month] -= row.interest * tax;  // interest is deductible
+    }
+    if (loanMonths > n) {                       // pay off remaining balance
+      loanPayoff = sched.rows[n - 1].balance;
+      buyPre[n] += loanPayoff;
+    }
+  }
+  const monthlyDep = price / lifeMonths;        // straight-line to zero
+  for (let t = 1; t <= Math.min(n, lifeMonths); t++) buyTax[t] -= monthlyDep * tax;
+  const bookValue = Math.max(0, price - monthlyDep * Math.min(n, lifeMonths));
+  buyPre[n] -= residual;                        // keep / sell the equipment
+  buyTax[n] += (residual - bookValue) * tax;    // tax on gain (or saving on loss)
+
+  /* ---------- Totals & NPVs ---------- */
+  const leaseAfter = leasePre.map((v, t) => v + leaseTax[t]);
+  const buyAfter = buyPre.map((v, t) => v + buyTax[t]);
+
+  const leaseCashOut = inp.leaseUpfront + inp.leasePmt * n + (buyout ? inp.buyoutAmt : 0);
+  const buyCashOut = buyPre.reduce((s, v) => s + v, 0) + residual; // add back residual inflow
+
+  /* Lessor's view for the implied rate: −price today, then receives
+     upfront + rent, and at t = n the buyout (or equipment back). */
+  const lessor = new Array(n + 1).fill(0);
+  lessor[0] = -price + inp.leaseUpfront;
+  for (let k = 0; k < n; k++) lessor[advance ? k : k + 1] += inp.leasePmt;
+  lessor[n] += buyout ? inp.buyoutAmt : residual;
+
+  return {
+    n,
+    taxOn: tax > 0,
+    lease: {
+      monthly: inp.leasePmt,
+      upfront: inp.leaseUpfront + (advance ? inp.leasePmt : 0),
+      cashOut: leaseCashOut,
+      keeps: buyout ? residual : 0,
+      npvPre: npv(leasePre, inp.discRate),
+      npvAfter: npv(leaseAfter, inp.discRate),
+      pre: leasePre, after: leaseAfter
+    },
+    buy: {
+      monthly: buyMonthly,
+      upfront: buyPre[0],
+      cashOut: buyCashOut,
+      payoff: loanPayoff,
+      keeps: residual,
+      npvPre: npv(buyPre, inp.discRate),
+      npvAfter: npv(buyAfter, inp.discRate),
+      pre: buyPre, after: buyAfter
+    },
+    impliedRate: impliedLeaseRate(lessor),
+    rateFactor: price > 0 ? inp.leasePmt / price : NaN
+  };
+}
+
+/* Group monthly flows into "Today" + Year 1, Year 2, … */
+function byYear(flows) {
+  const years = [flows[0]];
+  for (let t = 1; t < flows.length; t++) {
+    const y = Math.ceil(t / 12);
+    years[y] = (years[y] || 0) + flows[t];
+  }
+  return years;
+}
+
+/* =====================================================================
+   PAGE / UI CODE (only runs in a browser)
+   ===================================================================== */
+if (typeof document !== "undefined") {
+  const $ = (id) => document.getElementById(id);
+  const usd0 = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+  const usd2 = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const money = (v) => (Math.abs(v) < 0.5 ? "$0" : v < 0 ? "(" + usd0.format(-v) + ")" : usd0.format(v));
+  const pct = (v) => (isFinite(v) ? v.toFixed(2) + "%" : "n/a");
+
+  const numIds = ["price","life","residual","leaseTerm","leasePmt","leaseUpfront","buyoutAmt","downPct","loanApr","loanTerm","discRate","taxRate"];
+  const selIds = ["leaseTiming","leaseEnd","buyMethod"];
+
+  function readInputs() {
+    const inp = {};
+    numIds.forEach((id) => { const v = parseFloat($(id).value); inp[id] = isFinite(v) ? v : 0; });
+    selIds.forEach((id) => { inp[id] = $(id).value; });
+    return inp;
+  }
+  function fill(values) {
+    numIds.concat(selIds).forEach((id) => { $(id).value = values[id]; });
+  }
+
+  function render() {
+    const inp = readInputs();
+    $("buyoutField").classList.toggle("hidden", inp.leaseEnd !== "buyout");
+    $("loanFields").classList.toggle("hidden", inp.buyMethod !== "loan");
+
+    const r = calculate(inp);
+    const useTax = r.taxOn;
+    const L = useTax ? r.lease.npvAfter : r.lease.npvPre;
+    const B = useTax ? r.buy.npvAfter : r.buy.npvPre;
+    const diff = Math.abs(L - B);
+    const leaseWins = L < B;
+    const tie = diff < Math.max(100, 0.005 * inp.price);
+
+    // ----- Verdict -----
+    const benchName = inp.buyMethod === "loan" ? "your loan APR" : "your cost of capital";
+    const bench = inp.buyMethod === "loan" ? inp.loanApr : inp.discRate;
+    const ir = r.impliedRate;
+    const rateCheaper = ir < bench;
+    let headline, why;
+    if (tie) {
+      headline = "It's roughly a tie (within " + usd0.format(diff) + " in today's dollars).";
+      why = "Pick on other factors: flexibility, upgrades, maintenance, or keeping cash and credit lines free.";
+    } else if (leaseWins) {
+      headline = "Leasing is cheaper by " + usd0.format(diff) + " in today's dollars.";
+      why = isFinite(ir)
+        ? (rateCheaper
+            ? "The lease's implied rate (" + pct(ir) + ") is below " + benchName + " (" + pct(bench) + "), so the lessor is financing the equipment more cheaply than you could."
+            : "Even though the lease's implied rate (" + pct(ir) + ") is above " + benchName + " (" + pct(bench) + "), the lease wins once timing, taxes and the end-of-term value are counted.")
+        : "The lease's payments cost less in present-value terms than owning.";
+    } else {
+      headline = "Buying is cheaper by " + usd0.format(diff) + " in today's dollars.";
+      why = isFinite(ir)
+        ? (!rateCheaper
+            ? "The lease's implied rate (" + pct(ir) + ") is above " + benchName + " (" + pct(bench) + "), so you'd pay more for the lessor's money than for your own financing."
+            : "Although the lease's implied rate (" + pct(ir) + ") is below " + benchName + " (" + pct(bench) + "), owning wins once taxes and the " + usd0.format(inp.residual) + " resale value you keep are counted.")
+        : "Owning costs less in present-value terms, including the resale value you keep.";
+    }
+    $("verdictHeadline").textContent = headline;
+    $("verdictWhy").textContent = why;
+    $("verdictBasis").textContent = "Based on " + (useTax ? "after-tax" : "pre-tax") + " NPV over the " + r.n + "-month lease term, discounted at " + inp.discRate + "% a year.";
+    $("verdictCard").style.borderLeftColor = tie ? "var(--muted)" : leaseWins ? "var(--lease)" : "var(--buy)";
+
+    // ----- KPI tiles -----
+    $("kpiImplied").textContent = pct(ir);
+    $("kpiImpliedSub").textContent = "vs. " + benchName.replace("your ", "") + " " + pct(bench) + " · rate factor " + (isFinite(r.rateFactor) ? r.rateFactor.toFixed(4) : "n/a");
+    $("kpiLease").textContent = money(L);
+    $("kpiLeaseSub").textContent = useTax ? "after tax · " + money(r.lease.npvPre) + " pre-tax" : "pre-tax";
+    $("kpiBuy").textContent = money(B);
+    $("kpiBuySub").textContent = useTax ? "after tax · " + money(r.buy.npvPre) + " pre-tax" : "pre-tax";
+
+    // ----- Summary table -----
+    const winCls = (isLeaseCol, a, b) => (tie ? "" : (isLeaseCol ? a < b : b < a) ? ' class="win"' : "");
+    const rows = [
+      ["Monthly payment", usd2.format(r.lease.monthly), inp.buyMethod === "cash" ? "None (cash)" : usd2.format(r.buy.monthly)],
+      ["Cash due at signing", money(r.lease.upfront), money(r.buy.upfront)],
+      ["Total cash out over " + r.n + " months", money(r.lease.cashOut), money(r.buy.cashOut) + (r.buy.payoff > 0.5 ? "*" : "")],
+      ["Equipment value you keep at the end", money(r.lease.keeps), money(r.buy.keeps)],
+      ["Net cost (cash out − value kept)", money(r.lease.cashOut - r.lease.keeps), money(r.buy.cashOut - r.buy.keeps)]
+    ];
+    let html = rows.map((rw) => "<tr><td>" + rw[0] + "</td><td>" + rw[1] + "</td><td>" + rw[2] + "</td></tr>").join("");
+    html += '<tr class="emph"><td>NPV of cost, pre-tax</td><td' + winCls(true, r.lease.npvPre, r.buy.npvPre) + ">" + money(r.lease.npvPre) + "</td><td" + winCls(false, r.lease.npvPre, r.buy.npvPre) + ">" + money(r.buy.npvPre) + "</td></tr>";
+    if (useTax) {
+      html += '<tr class="emph"><td>NPV of cost, after tax</td><td' + winCls(true, r.lease.npvAfter, r.buy.npvAfter) + ">" + money(r.lease.npvAfter) + "</td><td" + winCls(false, r.lease.npvAfter, r.buy.npvAfter) + ">" + money(r.buy.npvAfter) + "</td></tr>";
+    } else {
+      html += '<tr><td>NPV of cost, after tax</td><td colspan="2" style="text-align:center;color:var(--muted)">Enter a tax rate to see this</td></tr>';
+    }
+    html += "<tr><td>Lease implied rate</td><td>" + pct(ir) + '</td><td style="color:var(--muted)">' + (inp.buyMethod === "loan" ? "Loan APR " + pct(inp.loanApr) : "Paid in cash") + "</td></tr>";
+    $("summaryBody").innerHTML = html;
+    if (r.buy.payoff > 0.5) {
+      $("summaryBody").innerHTML += '<tr><td colspan="3" style="color:var(--muted);font-size:0.8rem">* Includes paying off the remaining loan balance of ' + money(r.buy.payoff) + " at month " + r.n + ".</td></tr>";
+    }
+
+    // ----- Year-by-year table -----
+    const ly = byYear(r.lease.pre), la = byYear(r.lease.after), by = byYear(r.buy.pre), ba = byYear(r.buy.after);
+    $("thLeaseTax").classList.toggle("hidden", !useTax);
+    $("thBuyTax").classList.toggle("hidden", !useTax);
+    let yh = "";
+    const taxCell = (v) => (useTax ? "<td>" + money(v) + "</td>" : "");
+    for (let y = 0; y < ly.length; y++) {
+      yh += "<tr><td>" + (y === 0 ? "Today" : "Year " + y) + "</td><td>" + money(ly[y] || 0) + "</td>" + taxCell(la[y] || 0) + "<td>" + money(by[y] || 0) + "</td>" + taxCell(ba[y] || 0) + "</tr>";
+    }
+    const sum = (a) => a.reduce((s, v) => s + (v || 0), 0);
+    yh += '<tr class="total"><td>Total (net)</td><td>' + money(sum(ly)) + "</td>" + taxCell(sum(la)) + "<td>" + money(sum(by)) + "</td>" + taxCell(sum(ba)) + "</tr>";
+    yh += '<tr class="emph"><td>NPV (today\'s dollars)</td><td>' + money(r.lease.npvPre) + "</td>" + taxCell(r.lease.npvAfter) + "<td>" + money(r.buy.npvPre) + "</td>" + taxCell(r.buy.npvAfter) + "</tr>";
+    $("yearBody").innerHTML = yh;
+  }
+
+  fill(DEFAULTS);
+  $("inputs").addEventListener("input", render);
+  $("inputs").addEventListener("change", render);
+  $("resetBtn").addEventListener("click", () => { fill(DEFAULTS); render(); });
+  render();
+}
+</script>
+</body>
+</html>
